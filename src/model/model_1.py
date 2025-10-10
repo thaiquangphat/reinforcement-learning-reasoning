@@ -36,7 +36,7 @@ class QueryPathRLV1(nn.Module):
         self,
         encoder: str = "sbert",
         in_dim: Optional[int] = None,
-        num_hops: int = 20,
+        num_hops: int = 100,
         reg_lambda: float = 0.01,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         reward_config: Optional[Dict[str, float]] = None,
@@ -82,6 +82,8 @@ class QueryPathRLV1(nn.Module):
         )
         self.reward_config = {**default_rc, **(reward_config or {})}
 
+        self._lazy_init_encoders()
+
         self.to(self.device)
 
     # ---------------------- Encoder helpers ----------------------
@@ -103,34 +105,28 @@ class QueryPathRLV1(nn.Module):
             self._bert_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
             self._bert = BertModel.from_pretrained("bert-base-uncased")
 
-    def get_question_embedding(self, question: Any) -> torch.Tensor:
-        """
-        Encode question text or accept an already-computed embedding (tensor or numpy).
-        Returns a torch tensor on self.device with shape (in_dim,).
-        """
-        # If user already passed an embedding tensor/array
-        if isinstance(question, torch.Tensor):
-            vec = question.to(self.device).float()
-            if vec.dim() == 2 and vec.size(0) == 1:
-                vec = vec.squeeze(0)
-            return vec
+    def _lstm_step(self, e_t, q_t, cx):
+        # Flatten everything to (1, D)
+        e_t = e_t.view(1, -1)
+        q_t = q_t.view(1, -1)
+        cx = cx.view(1, -1)
+        return self.lstm(e_t, (q_t, cx))
 
-        if isinstance(question, (list, tuple)) and len(question) and isinstance(question[0], (int, float)):
-            # raw vector-like list -> tensor
-            return torch.tensor(question, device=self.device, dtype=torch.float32)
-
-        # else assume text and use encoder if available
-        self._lazy_init_encoders()
-        if self.encoder_name == "sbert" and self._sbert is not None:
-            vec = torch.tensor(self._sbert.encode(question), device=self.device, dtype=torch.float32)
-            return vec
-        if self.encoder_name == "bert" and self._bert is not None:
-            toks = self._bert_tokenizer(question, return_tensors="pt", truncation=True, padding=True)
-            out = self._bert(**{k: v.to(self.device) for k, v in toks.items()})
-            # use pooled output
-            vec = out.pooler_output.squeeze(0)
-            return vec
-        raise RuntimeError("No suitable encoder available for question embedding. Pass precomputed embedding instead.")
+    def get_embedding(self, item: Any) -> torch.Tensor:
+        """
+        Encode question text or accept an already-computed embedding (tensor, numpy, or list).
+        Returns a torch.Tensor of shape (1, hidden_dim) on self.device.
+        """
+        if self.encoder_name == 'sbert':
+            emb = self._sbert.encode(item, convert_to_tensor=True)
+            return emb.clone().detach()
+        elif self.encoder_name == 'bert':
+            inputs = self._bert_tokenizer(item, return_tensors="pt", padding=True, truncation=True)
+            inputs = {key: val.to(self.device) for key, val in inputs.items()}
+            with torch.no_grad():
+                outputs = self._bert(**inputs)
+            return outputs.last_hidden_state[:, 0, :]
+        raise NotImplementedError(f"Encoder {self.encoder_name} not implemented")
 
     # ---------------------- Action selection utilities ----------------------
     def _score_candidates(self, q_t: torch.Tensor, h_t: torch.Tensor, candidates_h: torch.Tensor) -> torch.Tensor:
@@ -235,9 +231,8 @@ class QueryPathRLV1(nn.Module):
         device = self.device
 
         # question embedding
-        q_t = self.get_question_embedding(question)  # (D,)
-        if q_t.dim() == 1:
-            q_t = q_t.to(device)
+        q_t = self.get_embedding(question).to(device)[0]  # (D,)
+
         # initial h_t is the embedding of the start node
         h_t = rgat_nodes[start_idx].to(device)
         # initial LSTM cell state: (h, c)
@@ -307,10 +302,11 @@ class QueryPathRLV1(nn.Module):
             # update visited
             visited.add(chosen_idx)
             # update lstm state q_t from chosen node embedding
-            hx, cx = self.lstm(e_list[-1].unsqueeze(0).squeeze(0).unsqueeze(0), (q_t.unsqueeze(0), cx.unsqueeze(0)))
+            hx, cx = self._lstm_step(e_list[-1], q_t, cx)
             # The above uses LSTMCell semantics; however we will instead directly update q_t to the embedding
             # to keep things simple and stable in mixed environments:
-            q_t = (q_t + e_list[-1].to(device)) / 2.0  # simple update rule (alternatively use LSTMCell properly)
+            # q_t = (q_t + e_list[-1].to(device)) / 2.0  # simple update rule (alternatively use LSTMCell properly)
+            q_t = hx.squeeze(0)
             # set h_t to newly chosen node embedding
             h_t = rgat_nodes[chosen_idx].to(device)
 

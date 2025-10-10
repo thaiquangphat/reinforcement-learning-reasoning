@@ -53,9 +53,9 @@ class RelationalGATHead(nn.Module):
         return h_prime + skip
 
 
-class RelationalGATV3(nn.Module):
+class RelationalGATV1(nn.Module):
     def __init__(self, in_dim=384, num_layers=3, num_heads=4):
-        super(RelationalGATV3, self).__init__()
+        super(RelationalGATV1, self).__init__()
 
         self.in_dim = in_dim
         self.out_dim = in_dim

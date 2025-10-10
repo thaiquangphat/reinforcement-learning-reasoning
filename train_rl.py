@@ -20,6 +20,23 @@ from tqdm import tqdm
 from src import RELATIONAL_GAT, QUERY_PATH_RL
 from dataloader import RelGraphDataset
 
+# ----------- Dataset Loader -----------
+def load_dataset(path, encoder_name, tag="2wikiqa", test=False):
+    test_samples = 50
+    dataset = []
+    with open(path, 'r', encoding='utf-8') as file:
+        for line in file:
+            dataset.append(json.loads(line))
+    dataset = [d for d in dataset if d['tag']==tag]
+    if test:
+        dataset = dataset[:test_samples]
+
+    return RelGraphDataset(
+        raw_data=dataset,
+        encoder=encoder_name,
+        num_samples=-1,
+        max_nodes=50
+    )
 
 # ----------- Local JSONL Logger (logs/) -----------
 def setup_local_logger(name, log_dir="logs"):
@@ -51,26 +68,32 @@ def setup_local_logger(name, log_dir="logs"):
     return _log, str(log_path)
 
 
-def compute_gae(rewards: List[float], values: List[float], gamma: float, lam: float, last_value: float = 0.0):
+def compute_gae(rewards, values, gamma, lam, last_value=0.0):
+    if not values:
+        values = [0.0] * len(rewards)
+
+    rewards = [float(r) for r in rewards]
+    values = [float(v) for v in values] + [float(last_value)]
+
     T = len(rewards)
-    values = values + [last_value]
     advantages = [0.0] * T
     gae = 0.0
     for t in reversed(range(T)):
         delta = rewards[t] + gamma * values[t + 1] - values[t]
         gae = delta + gamma * lam * gae
         advantages[t] = gae
+
     returns = [advantages[t] + values[t] for t in range(T)]
     return returns, advantages
 
 
+
 def train(
-    save_path: str = "./checkpoints_rl",
+    save_path: str = "./checkpoints",
     rgat_version: str = "RelationalGATV1",
     query_path_version: str = "QueryPathRLV1",
     querypath_cfg: Dict[str, Any] = None,
     epochs: int = 10,
-    batch_size: int = 8,
     episodes_per_update: int = 16,
     gamma: float = 0.99,
     lam: float = 0.95,
@@ -86,22 +109,38 @@ def train(
     local_log, log_file = setup_local_logger(run_name, log_dir="logs/train")
     print(f"[INFO] Logging to {log_file}")
 
+    checkpoint_path = save_path + "/" + run_name
+    model_save_path = checkpoint_path + "/model"
+    gat_save_path = checkpoint_path + "/rgat"
+
+    os.makedirs(checkpoint_path, exist_ok=True)
+    os.makedirs(model_save_path, exist_ok=True)
+    os.makedirs(gat_save_path, exist_ok=True)
+
+    local_log({
+        "event": "save_paths",
+        "checkpoints": checkpoint_path,
+        "model_checkpoints": model_save_path,
+        "rgat_checkpoints": gat_save_path
+    })
+
     model = QUERY_PATH_RL[query_path_version](device=device, **(querypath_cfg or {}))
     model.to(device)
+    print("[INFO] Initialized Query path model:", query_path_version)
 
     gat_encoder = None
-    if RELATIONAL_GAT is not None:
-        gat_cls = RELATIONAL_GAT.get(rgat_version, None)
-        if gat_cls is not None:
-            gat_encoder = gat_cls(in_dim=model.in_dim).to(device)
-            print("[INFO] Initialized GAT encoder:", rgat_version)
+    gat_cls = RELATIONAL_GAT.get(rgat_version, None)
+    if gat_cls is not None:
+        gat_encoder = gat_cls(in_dim=model.in_dim).to(device)
+        print("[INFO] Initialized GAT encoder:", rgat_version)
+
     optimizer = optim.Adam(list(model.parameters()) + ([] if gat_encoder is None else list(gat_encoder.parameters())), lr=lr)
 
     dataset = None
     dataloader = None
-    if RelGraphDataset is not None:
-        dataset = RelGraphDataset()
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    
+    dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', test=True)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
     global_step = 0
     for epoch in range(epochs):
@@ -116,10 +155,12 @@ def train(
         pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}")
 
         for idx, batch in enumerate(pbar):
-            try:
-                adj, node_feat, rel_feat, nodes, query = batch
-            except Exception:
-                adj, node_feat, rel_feat, nodes, query = batch[0]
+            adj = batch["adj"].to(device)
+            rel_feat = batch["rel_feat"].to(device)
+            node_feat = batch["node_feat"].to(device)
+            nodes = batch["nodes"]
+            query = batch["query"]
+            question = batch["question"][0]
 
             if isinstance(adj, (list, tuple)): adj = adj[0]
             if adj.dim() == 3 and adj.size(0) == 1: adj = adj.squeeze(0)
@@ -127,22 +168,20 @@ def train(
             if node_feat.dim() == 3 and node_feat.size(0) == 1: node_feat = node_feat.squeeze(0)
 
             rgat_nodes = node_feat
-            if gat_encoder is not None:
-                with torch.no_grad():
-                    out = gat_encoder(adj.unsqueeze(0), rel_feat, node_feat.unsqueeze(0))
-                    rgat_nodes = out[0].squeeze(0) if isinstance(out, (tuple, list)) else out.squeeze(0)
+            with torch.no_grad():
+                out = gat_encoder(adj.unsqueeze(0), rel_feat, node_feat.unsqueeze(0))
+                rgat_nodes = out[0].squeeze(0) if isinstance(out, (tuple, list)) else out.squeeze(0)
 
             for qury in query:
-                try:
-                    start_node = qury[0][0]; target_node = qury[-1][-1]
-                    start_idx = nodes.index(start_node); target_idx = nodes.index(target_node)
-                except Exception:
-                    start_idx = int(qury[0][0]); target_idx = int(qury[-1][-1])
-                question_text = " ".join([str(x) for x in qury])
+                start_node = qury[0][0]
+                target_node = qury[-1][-1]
+
+                start_idx = nodes.index(start_node)
+                target_idx = nodes.index(target_node)
 
                 ep = model.run_episode(
                     start_idx=start_idx,
-                    question=question_text,
+                    question=question,
                     adj=adj.to(device),
                     rgat_nodes=rgat_nodes.to(device),
                     num_hops=model.num_hops,
@@ -160,21 +199,42 @@ def train(
                     for ep_item in batch_episodes:
                         rewards = ep_item["rewards"]
                         values = [v.item() if isinstance(v, torch.Tensor) else float(v) for v in ep_item["values"]]
-                        last_value = 0.0
-                        if len(values) > 0:
-                            with torch.no_grad():
-                                last_value = float(model.get_value(ep_item["q_list"][-1].to(device), ep_item["e_list"][-1].to(device)).item())
+                        if len(values) < len(rewards):
+                            missing = len(rewards) - len(values)
+                            values = values + [0.0] * missing
+                        with torch.no_grad():
+                            if len(values) > 0:
+                                last_value = float(
+                                    model.get_value(
+                                        ep_item["q_list"][-1].to(device),
+                                        ep_item["e_list"][-1].to(device)
+                                    ).item()
+                                )
+                            else:
+                                last_value = 0.0
                         returns, advantages = compute_gae(rewards, values, gamma, lam, last_value)
                         all_returns += returns; all_advantages += advantages
                         all_logps += [lp for lp in ep_item["logps"]]
                         all_entropies += ep_item["entropies"]
                         all_values += values
 
+                    min_len = min(len(all_logps), len(all_advantages), len(all_returns), len(all_values))
+                    if min_len == 0:
+                        continue
+                    all_logps = all_logps[:min_len]
+                    all_advantages = all_advantages[:min_len]
+                    all_returns = all_returns[:min_len]
+                    all_values = all_values[:min_len]
+
+                    logps_t = torch.stack(all_logps).to(device)
                     advantages_t = torch.tensor(all_advantages, dtype=torch.float32, device=device)
                     returns_t = torch.tensor(all_returns, dtype=torch.float32, device=device)
-                    logps_t = torch.stack(all_logps).to(device) if len(all_logps) > 0 else torch.tensor([], device=device)
                     values_t = torch.tensor(all_values, dtype=torch.float32, device=device)
-                    advantages_t = (advantages_t - advantages_t.mean()) / (advantages_t.std() + 1e-8)
+
+                    if advantages_t.numel() > 1:
+                        advantages_t = (advantages_t - advantages_t.mean()) / (advantages_t.std() + 1e-8)
+                    else:
+                        advantages_t = advantages_t * 0.0
 
                     actor_loss = -(logps_t * advantages_t).mean() if logps_t.numel() > 0 else torch.tensor(0.0, device=device)
                     value_loss = F.mse_loss(values_t, returns_t) if values_t.numel() > 0 else torch.tensor(0.0, device=device)
@@ -215,20 +275,19 @@ def train(
             "total_steps": epoch_steps,
         })
 
-        torch.save(model.state_dict(), os.path.join(save_path, f"querypathrl_epoch{epoch+1}.pt"))
+        torch.save(model.state_dict(), os.path.join(model_save_path, f"querypathrl_epoch{epoch+1}.pt"))
         if gat_encoder is not None:
-            torch.save(gat_encoder.state_dict(), os.path.join(save_path, f"gat_encoder_epoch{epoch+1}.pt"))
+            torch.save(gat_encoder.state_dict(), os.path.join(gat_save_path, f"gat_encoder_epoch{epoch+1}.pt"))
         print(f"[INFO] Epoch {epoch+1} done. Logged to {log_file}")
 
 
 if __name__ == "__main__":
     train(
-        save_path="./checkpoints_rl",
-        rgat_version="RelationalGATV3",
+        save_path="./checkpoints",
+        rgat_version="RelationalGATV1",
         query_path_version="QueryPathRLV1",
-        querypath_cfg={"encoder": "sbert", "num_hops": 20},
+        querypath_cfg={"encoder": "bert", "num_hops": 100},
         epochs=5,
-        batch_size=1,
         episodes_per_update=8,
         gamma=0.99,
         lam=0.95,
