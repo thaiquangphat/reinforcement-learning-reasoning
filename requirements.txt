@@ -1,0 +1,23 @@
+openai
+google-generativeai
+graphviz
+datasets
+transformers
+tensorflow>=2.0
+matplotlib
+networkx
+python-dotenv
+uv
+spacy-entity-linker
+scikit-learn
+sentence-transformers
+tf-keras
+tensorboard
+nltk
+umap-learn
+faiss-cpu
+wandb
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch
+torchvision
+torchaudio
