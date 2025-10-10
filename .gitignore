@@ -205,3 +205,39 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# the file itself
+.gitignore
+.gitattributes
+
+# the environment file
+*env*
+
+# the virtual environment
+venv
+unix_env
+
+# model checkpoints
+**/*checkpoints*/
+
+# logs file
+**/*logs*/
+
+# running instructions (for myself)
+docs/run.md
+
+# cache files
+__pycache__/
+
+# other files
+runs
+
+.ssh
+
+test.py
+
+combine_dataset.py
+
+dataset/
+
+clean_inference.py
