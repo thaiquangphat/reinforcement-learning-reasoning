@@ -106,7 +106,9 @@ def train(
     device = torch.device(device)
 
     run_name = f"run_{datetime.datetime.now():%Y%m%d_%H%M%S}"
-    local_log, log_file = setup_local_logger(run_name, log_dir="logs/train")
+    run_dir = "logs/" + run_name
+    os.makedirs(run_dir, exist_ok=True)
+    local_log, log_file = setup_local_logger(run_name, log_dir=run_dir)
     print(f"[INFO] Logging to {log_file}")
 
     checkpoint_path = save_path + "/" + run_name
@@ -277,7 +279,7 @@ def train(
 
         torch.save(model.state_dict(), os.path.join(model_save_path, f"querypathrl_epoch{epoch+1}.pt"))
         if gat_encoder is not None:
-            torch.save(gat_encoder.state_dict(), os.path.join(gat_save_path, f"gat_encoder_epoch{epoch+1}.pt"))
+            torch.save(gat_encoder.state_dict(), os.path.join(gat_save_path, f"gatencoder_epoch{epoch+1}.pt"))
         print(f"[INFO] Epoch {epoch+1} done. Logged to {log_file}")
 
 
@@ -287,7 +289,7 @@ if __name__ == "__main__":
         rgat_version="RelationalGATV1",
         query_path_version="QueryPathRLV1",
         querypath_cfg={"encoder": "bert", "num_hops": 100},
-        epochs=5,
+        epochs=1,
         episodes_per_update=8,
         gamma=0.99,
         lam=0.95,
