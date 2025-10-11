@@ -100,6 +100,7 @@ def train(
     lr: float = 3e-4,
     vf_coeff: float = 0.5,
     entropy_coeff: float = 0.01,
+    test_run: bool = False,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     os.makedirs(save_path, exist_ok=True)
@@ -136,12 +137,30 @@ def train(
         gat_encoder = gat_cls(in_dim=model.in_dim).to(device)
         print("[INFO] Initialized GAT encoder:", rgat_version)
 
+    local_log({
+        "event": "base_model",
+        "model": query_path_version,
+        "rgat_model": rgat_version
+    })
+    
     optimizer = optim.Adam(list(model.parameters()) + ([] if gat_encoder is None else list(gat_encoder.parameters())), lr=lr)
+
+    local_log({
+        "event": "hyperparameters",
+        "epochs": epochs,
+        "episodes_per_update": episodes_per_update,
+        "gamma": gamma,
+        "lam": lam,
+        "lr": lr,
+        "vf_coeff": vf_coeff,
+        "entropy_coeff": entropy_coeff,
+        "test_run": test_run,
+    })
 
     dataset = None
     dataloader = None
     
-    dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', test=True)
+    dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', test=test_run)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
     global_step = 0
@@ -154,7 +173,7 @@ def train(
         epoch_success = 0
         epoch_steps = 0
         batch_episodes = []
-        pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}")
+        pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}", ascii=" .-=#")
 
         for idx, batch in enumerate(pbar):
             adj = batch["adj"].to(device)
@@ -293,7 +312,8 @@ if __name__ == "__main__":
         episodes_per_update=8,
         gamma=0.99,
         lam=0.95,
-        lr=3e-4,
+        lr=1e-5,
         vf_coeff=0.5,
         entropy_coeff=0.01,
+        test_run=False
     )
