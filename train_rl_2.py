@@ -151,12 +151,14 @@ def train(
     clip_epsilon: float = 0.2,
     her_prob: float = 0.4,
     test_run: bool = False,
+    tag: str="musique",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     args_dict = {
         "event": "input_parameters",
         **locals().copy()
     }
+    print(json.dumps(args_dict, indent=2, ensure_ascii=False))
 
     os.makedirs(save_path, exist_ok=True)
     device = torch.device(device)
@@ -189,11 +191,42 @@ def train(
         print("[INFO] Initialized GAT encoder:", rgat_version)
 
     # separate optimizers: worker params and manager params (and auxiliary)
-    worker_params = list(model.worker_inner.parameters()) + list(model.worker_value.parameters()) + list(model.path_gru.parameters()) + list(model.lstm.parameters())
-    manager_params = list(model.manager_policy.parameters()) + list(model.manager_value.parameters()) + list(model.prototypes.parameters())
+    # === Define parameter groups ===
+    worker_params = (
+        list(model.worker_inner.parameters()) +
+        list(model.worker_value.parameters()) +
+        list(model.path_gru.parameters()) +
+        list(model.lstm.parameters())
+    )
+    
+    manager_params = (
+        list(model.manager_policy.parameters()) +
+        list(model.manager_value.parameters()) +
+        list(model.prototypes.parameters())
+    )
+    
     aux_params = list(model.aux_dist.parameters())
-    all_params = worker_params + manager_params + aux_params + ([] if gat_encoder is None else list(gat_encoder.parameters()))
-    optimizer = optim.Adam(all_params, lr=lr_worker)
+    
+    gat_params = [] if gat_encoder is None else list(gat_encoder.parameters())
+    
+    # === Separate optimizers ===
+    optimizer_worker = optim.AdamW(
+        worker_params + gat_params,
+        lr=lr_worker,          # typically higher, e.g. 3e-4
+        weight_decay=1e-2
+    )
+    
+    optimizer_manager = optim.AdamW(
+        manager_params,
+        lr=lr_manager,         # typically lower, e.g. 1e-4
+        weight_decay=1e-2
+    )
+    
+    optimizer_aux = optim.AdamW(
+        aux_params,
+        lr=1e-5,             # smaller learning rate (e.g., 1e-5)
+        weight_decay=0.0
+    )
     # using single optimizer for simplicity; alternative: separate optimizers for manager/worker (okay)
 
     local_log({"event": "train_start", "run_name": run_name})
@@ -212,8 +245,8 @@ def train(
             dataset = [d for d in dataset if d['tag']==tag]
             if test_run:
                 dataset = dataset[:test_samples]
-            return RelGraphDataset(raw_data=dataset, encoder=encoder_name, num_samples=-1, max_nodes=50)
-        dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', tag='hotpotqa', test=False)
+            return RelGraphDataset(raw_data=dataset, encoder=encoder_name, num_samples=-1, max_nodes=200)
+        dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', tag=tag, test=False)
         dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     except Exception as e:
         print("[WARN] Dataset loader failed; ensure dataloader exists.", e)
@@ -471,10 +504,23 @@ def train(
                     entropy_bonus = torch.tensor(0.0, device=device)
                     total_loss = actor_loss + 0.5 * value_loss_w - 0.01 * entropy_bonus + model.get_regularization_loss()
 
-                    optimizer.zero_grad()
+                    # Backpropagation for hierarchical model
+                    optimizer_worker.zero_grad()
+                    optimizer_manager.zero_grad()
+                    optimizer_aux.zero_grad()
+                    
+                    # Backward pass — compute all gradients
                     total_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(all_params, 1.0)
-                    optimizer.step()
+                    
+                    # Clip gradients per parameter group (recommended)
+                    torch.nn.utils.clip_grad_norm_(worker_params, 1.0)
+                    torch.nn.utils.clip_grad_norm_(manager_params, 1.0)
+                    torch.nn.utils.clip_grad_norm_(aux_params, 1.0)
+                    
+                    # Step each optimizer independently
+                    optimizer_worker.step()
+                    optimizer_manager.step()
+                    optimizer_aux.step()
 
                     # report & reset batch
                     mean_reward = epoch_reward / max(1, global_step + 1)
@@ -517,18 +563,19 @@ def train(
 if __name__ == "__main__":
     train(
         save_path="./checkpoints_hier",
-        querypath_cfg={"encoder": "bert", "num_hops": 100, "manager_horizon": 4, "num_prototypes": 128},
-        epochs=5,
-        episodes_per_update=8,
+        querypath_cfg={"encoder": "bert", "num_hops": 20, "manager_horizon": 4, "num_prototypes": 128},
+        epochs=10,
+        episodes_per_update=4,
         gamma_w=0.99,
         gamma_m=0.995,
         lam=0.95,
-        lr_worker=3e-4,
-        lr_manager=1e-4,
-        ppo_epochs=4,
-        ppo_batch_size=64,
+        lr_worker=2e-4,
+        lr_manager=2e-4,
+        ppo_epochs=8,
+        ppo_batch_size=32,
         clip_epsilon=0.2,
         her_prob=0.4,
-        test_run=True,
+        test_run=False,
+        tag='hotpotqa',
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
