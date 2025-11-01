@@ -126,7 +126,7 @@ def inference(
             if test_run:
                 dataset = dataset[:test_samples]
             return RelGraphDataset(raw_data=dataset, encoder=encoder_name, num_samples=-1, max_nodes=200)
-        dataset = load_dataset(path='dataset/train.jsonl', encoder_name='bert', tag=tag, test=False)
+        dataset = load_dataset(path='dataset/test.jsonl', encoder_name='bert', tag=tag, test=False)
         dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     except Exception as e:
         print("[WARN] Dataset loader failed; ensure dataloader exists.", e)
