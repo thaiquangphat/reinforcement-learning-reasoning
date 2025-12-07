@@ -1,1 +1,2 @@
 from dataloader.dataloader_1 import RelGraphDataset
+from dataloader.dataloader_2 import RelGraphDataset2
