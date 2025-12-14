@@ -428,8 +428,8 @@ class HierarchicalQueryPathRLV2(nn.Module):
             target_idx=target_idx
         )
 
-    def run_inference(self, start_idx: int, question: Any, adj: torch.Tensor, rgat_nodes: torch.Tensor, num_hops: Optional[int] = None, mask_visited: bool = True) -> Dict[str, Any]:
-        return self.run_episode(start_idx, question, adj, rgat_nodes, num_hops=num_hops, deterministic=True, mask_visited=mask_visited)
+    def run_inference(self, start_idx: int, question: Any, adj: torch.Tensor, rgat_nodes: torch.Tensor, num_hops: Optional[int] = None, mask_visited: bool = True, amr: Optional[Any] = None) -> Dict[str, Any]:
+        return self.run_episode(start_idx, question, adj, rgat_nodes, num_hops=num_hops, deterministic=True, mask_visited=mask_visited, amr=amr)
 
     # ----------------------------- Reward helper -----------------------------
     def compute_env_reward(self, prev_idx: int, next_idx: int, target_idx: Optional[int], rgat_nodes: torch.Tensor, node_feats: Optional[torch.Tensor] = None, visited: Optional[set] = None) -> float:
