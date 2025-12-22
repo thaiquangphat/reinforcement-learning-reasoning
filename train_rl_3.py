@@ -151,7 +151,7 @@ def train(
     os.makedirs(save_path, exist_ok=True)
     device = torch.device(device)
 
-    run_name = f"hier_run_{datetime.datetime.now():%Y%m%d_%H%M%S}"
+    run_name = f"hier_run_amr_{datetime.datetime.now():%Y%m%d_%H%M%S}"
     run_dir = "logs/" + run_name
     os.makedirs(run_dir, exist_ok=True)
     local_log, log_file = setup_local_logger(run_name, log_dir=run_dir)
@@ -233,8 +233,8 @@ def train(
             dataset = [d for d in dataset if d['split'] == split and d['tag']==tag]
             if test_run:
                 dataset = dataset[:test_samples]
-            return RelGraphDataset2(raw_data=dataset, encoder=encoder_name, num_samples=-1, max_nodes=200)
-        dataset = load_dataset(path='dataset/traintestamr.jsonl', encoder_name='bert', tag=tag, test_run=False)
+            return RelGraphDataset2(raw_data=dataset, encoder=encoder_name, num_samples=6000, max_nodes=200)
+        dataset = load_dataset(path='dataset/traintestamr.jsonl', encoder_name='bert', tag=tag, test_run=test_run)
         dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     except Exception as e:
         print("[WARN] Dataset loader failed; ensure dataloader exists.", e)
@@ -542,9 +542,9 @@ def train(
         })
 
         # save model
-        torch.save(model.state_dict(), os.path.join(model_save_path, f"hier_querypathrl_epoch{epoch+1}.pt"))
+        torch.save(model.state_dict(), os.path.join(model_save_path, f"hier_amr_querypathrl_epoch{epoch+1}.pt"))
         if gat_encoder is not None:
-            torch.save(gat_encoder.state_dict(), os.path.join(gat_save_path, f"gatencoder_epoch{epoch+1}.pt"))
+            torch.save(gat_encoder.state_dict(), os.path.join(gat_save_path, f"gatencoder_amr_epoch{epoch+1}.pt"))
         print(f"[INFO] Epoch {epoch+1} done. Logged to {log_file}")
 
     print("[INFO] Training finished.")
@@ -552,20 +552,20 @@ def train(
 
 if __name__ == "__main__":
     train(
-        save_path="./checkpoints_hier",
+        save_path="./checkpoints_hier_amr",
         querypath_cfg={"encoder": "bert", "num_hops": 20, "manager_horizon": 4, "num_prototypes": 128},
         epochs=10,
-        episodes_per_update=4,
+        episodes_per_update=8,
         gamma_w=0.99,
         gamma_m=0.995,
         lam=0.95,
-        lr_worker=2e-4,
-        lr_manager=2e-4,
+        lr_worker=2e-5,
+        lr_manager=2e-5,
         ppo_epochs=8,
         ppo_batch_size=32,
         clip_epsilon=0.2,
         her_prob=0.4,
         test_run=False,
-        tag='hotpotqa',
+        tag='2wikiqa',
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
