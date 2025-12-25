@@ -10,10 +10,16 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import argparse
 
 from src import QUERY_PATH_RL, RELATIONAL_GAT
 from dataloader import RelGraphDataset2
 
+DATASET_SAMPLES = {
+    "hotpotqa": -1,
+    "2wikiqa": 9000,
+    "musique": -1,
+}
 
 # --------------------------- Local JSONL logger ---------------------------
 def setup_local_logger(name, log_dir="logs"):
@@ -62,6 +68,7 @@ def train(
     num_hops: int = 20,
     gamma: float = 0.99,
     lr: float = 3e-4,
+    num_samples=-1,
     ppo_clip = 0.1,
     ppo_epochs = 1,          # can start with 1 if unstable
     value_coef = 0.5,
@@ -105,7 +112,7 @@ def train(
             dataset = [d for d in dataset if d['split'] == split and d['tag']==tag]
             if test_run:
                 dataset = dataset[:test_samples]
-            return RelGraphDataset2(raw_data=dataset, encoder=encoder_name, num_samples=6000, max_nodes=200)
+            return RelGraphDataset2(raw_data=dataset, encoder=encoder_name, num_samples=num_samples, max_nodes=200)
 
     dataset = load_dataset(dataset_path, encoder, tag, test_run)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
@@ -221,14 +228,19 @@ def train(
 
                     new_logps = torch.stack(new_logps)
                     entropies = torch.stack(entropies)
+                    new_values = torch.stack(new_values)
 
+                    returns = returns[:new_values.size(0)]
+                    advantages = advantages[:new_values.size(0)]
+                    logps_old = logps_old[:new_values.size(0)]
+                    
                     ratio = torch.exp(new_logps - logps_old)
 
                     surr1 = ratio * advantages
                     surr2 = torch.clamp(ratio, 1 - ppo_clip, 1 + ppo_clip) * advantages
 
                     policy_loss = -torch.min(surr1, surr2).mean()
-                    new_values = torch.stack(new_values)
+                    
                     value_loss = F.mse_loss(new_values, returns)
                     entropy_loss = -entropies.mean()
 
@@ -294,6 +306,11 @@ def train(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", type=str, default="hotpotqa")
+    args = parser.parse_args()
+
+    num_samples = DATASET_SAMPLES[args.dataset]
     train(
         epochs=10,
         num_hops=20,
@@ -302,7 +319,8 @@ if __name__ == "__main__":
         model_version="QueryPathRLV02",
         rgat_version="RelationalGATV1",
         lr=3e-4,
+        num_samples=num_samples,
         tag="hotpotqa",
-        test_run=True,
+        test_run=False,
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
