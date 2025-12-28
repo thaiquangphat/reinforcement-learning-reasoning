@@ -16,6 +16,7 @@ import datetime
 from pathlib import Path
 from collections import deque
 from typing import Dict, Any
+import argparse
 
 import torch
 import torch.nn.functional as F
@@ -26,6 +27,11 @@ from tqdm import tqdm
 from src import QUERY_PATH_RL, RELATIONAL_GAT
 from dataloader import RelGraphDataset2
 
+DATASET_SAMPLES = {
+    "hotpotqa": -1,
+    "2wikiqa": 9000,
+    "musique": -1,
+}
 
 # --------------------------- Local JSONL logger ---------------------------
 def setup_local_logger(name, log_dir="logs"):
@@ -93,7 +99,7 @@ def train(
     os.makedirs(save_path, exist_ok=True)
     device = torch.device(device)
 
-    run_name = f"dqn_rl_{datetime.datetime.now():%Y%m%d_%H%M%S}"
+    run_name = f"baseline_rl_dqn_{datetime.datetime.now():%Y%m%d_%H%M%S}"
     run_dir = Path("logs") / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,7 +130,7 @@ def train(
         return RelGraphDataset2(
             raw_data=dataset,
             encoder=encoder_name,
-            num_samples=6000,
+            num_samples=DATASET_SAMPLES[tag],
             max_nodes=200,
         )
 
@@ -277,6 +283,12 @@ def train(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", type=str, default="hotpotqa")
+    parser.add_argument("--test_run", action="store_true")
+    args = parser.parse_args()
+    
     train(
-        test_run=True
+        tag=args.dataset,
+        test_run=args.test_run
     )
