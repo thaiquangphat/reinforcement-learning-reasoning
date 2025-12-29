@@ -100,6 +100,7 @@ class QueryPathDQN(nn.Module):
         h_t = rgat_nodes[cur_idx].to(self.device)
 
         transitions = []
+        idx_list: List[int] = []   # ← ADDED
         success = False
 
         for t in range(self.num_hops):
@@ -143,6 +144,7 @@ class QueryPathDQN(nn.Module):
                 "done": done,
             })
 
+            idx_list.append(next_idx)   # ← ADDED
 
             if done:
                 success = True
@@ -153,5 +155,7 @@ class QueryPathDQN(nn.Module):
 
         return {
             "transitions": transitions,
+            "idx_list": idx_list,     # ← ADDED
+            "start_idx": start_idx,   # ← ADDED
             "success": success,
         }
