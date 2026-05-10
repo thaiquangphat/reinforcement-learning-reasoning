@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from src import RELATIONAL_GAT, QUERY_PATH_RL  # if you maintain registry
-from dataloader import RelGraphDataset2  # assume same dataloader
+from src.dataloader import RelGraphDataset2  # assume same dataloader
 import argparse
 
 BEST_CHECKPOINT = {

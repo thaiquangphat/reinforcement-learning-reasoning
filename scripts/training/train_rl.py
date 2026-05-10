@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src import RELATIONAL_GAT, QUERY_PATH_RL
-from dataloader import RelGraphDataset
+from src.dataloader import RelGraphDataset
 
 # ----------- Dataset Loader -----------
 def load_dataset(path, encoder_name, tag="hotpotqa", test=False):

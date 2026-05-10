@@ -10,7 +10,7 @@ from tqdm import tqdm
 import argparse
 
 from src import RELATIONAL_GAT, QUERY_PATH_RL
-from dataloader import RelGraphDataset2
+from src.dataloader import RelGraphDataset2
 
 
 # --------------------------- Config ---------------------------

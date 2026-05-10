@@ -19,7 +19,7 @@ from tqdm import tqdm
 import argparse
 
 from src import QUERY_PATH_RL, RELATIONAL_GAT
-from dataloader import RelGraphDataset2
+from src.dataloader import RelGraphDataset2
 
 
 # --------------------------- Local JSONL logger ---------------------------

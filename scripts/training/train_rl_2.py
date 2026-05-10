@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 # Import registries / dataset loader from existing repo (as in train_rl.py)
 from src import RELATIONAL_GAT, QUERY_PATH_RL  # if you maintain registry
-from dataloader import RelGraphDataset  # assume same dataloader
+from src.dataloader import RelGraphDataset  # assume same dataloader
 
 # --------------------------- Local JSONL logger ---------------------------
 def setup_local_logger(name, log_dir="logs"):

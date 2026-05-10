@@ -24,7 +24,7 @@ from tqdm import tqdm
 # Importing model classes and dataset loader from your project.
 # Ensure pythonpath includes the project root or run from project root.
 from src import RELATIONAL_GAT, QUERY_PATH_RL
-from dataloader import RelGraphDataset
+from src.dataloader import RelGraphDataset
 
 # ----------------- Utilities copied/adapted from original -----------------
 def load_dataset(path, encoder_name, tag="hotpotqa", test=False):

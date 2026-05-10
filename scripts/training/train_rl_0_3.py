@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src import QUERY_PATH_RL, RELATIONAL_GAT
-from dataloader import RelGraphDataset2
+from src.dataloader import RelGraphDataset2
 
 DATASET_SAMPLES = {
     "hotpotqa": -1,
