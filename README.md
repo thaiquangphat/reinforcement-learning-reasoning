@@ -1,8 +1,8 @@
 # Reinforcement Learning for Reasoning
 
-A comprehensive reinforcement learning framework for reasoning tasks using graph attention networks and multiple RL algorithms (PPO, DQN, hierarchical approaches).
+A reinforcement learning framework for reasoning tasks using graph attention networks and multiple RL algorithms (PPO, DQN, hierarchical approaches).
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├── scripts/                    # All executable scripts
@@ -23,7 +23,7 @@ A comprehensive reinforcement learning framework for reasoning tasks using graph
 └── requirements.txt           # Dependencies
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Setup Environment
 
@@ -87,7 +87,7 @@ python scripts/utils/plot_train_logs.py
 python scripts/utils/ultis.py
 ```
 
-## 📦 Model Checkpoints
+## Model Checkpoints
 
 Checkpoints are organized by training variant in `checkpoints_archive/`:
 
@@ -100,46 +100,33 @@ Checkpoints are organized by training variant in `checkpoints_archive/`:
 | `checkpoints_dqn/` | DQN algorithm |
 | `checkpoints_hier/` | Hierarchical approach |
 
-## 📊 Data
+## Data
 
 - **Training Data:** `dataset/train.jsonl`
 - **Test Data:** `dataset/test.jsonl`
 - **Raw AMR Graphs:** `dataset/raw_amr/` (LDC2020T02 format)
-- **Processed Data:** `dataset/amr_decompose_llm_enhance.jsonl` (with LLM enhancements)
+- **Processed Data:** `dataset/amr_decompose_llm_enhance.jsonl` (with LLM enhancements, contact author for dataset)
 
-## 📖 Documentation
+## Documentation
 
 - `docs/baseline.md` - Baseline model documentation
 - `docs/amr_hrl.md` - Hierarchical RL with AMR graphs
 - `docs/emb_hrl.md` - Embedding-based hierarchical RL
 
-## 🔧 Dependencies
-
-Key libraries:
-- **PyTorch** - Deep learning framework
-- **Transformers** - Language models (HuggingFace)
-- **NetworkX** - Graph operations
-- **Sentence-Transformers** - Embedding models
-- **TensorBoard** - Training visualization
-- **WandB** - Experiment tracking
+## Dependencies
 
 See `requirements.txt` for the complete list.
 
-## 💡 Workflow
+## Workflow
 
-1. **Prepare Data:** Run scripts in `dataset/processing_scripts/`
 2. **Train Model:** `python scripts/training/train_rl.py`
-3. **Monitor Training:** Check `logs/` and TensorBoard
+3. **Monitor Training:** Check `logs/`
 4. **Run Inference:** `python scripts/inference/inference_rl.py`
 5. **Analyze Results:** `python scripts/utils/plot_train_logs.py`
 
-## 📝 Notes
+## Notes
 
 - Each training variant (0, 2, 3) uses different hyperparameters or algorithms
 - Variant 0 has 5 sub-experiments (0_1 through 0_5)
 - Training logs are saved to `logs/` for TensorBoard visualization
 - Checkpoints contain model weights and training state
-
-## 📄 License
-
-See LICENSE file for details.
